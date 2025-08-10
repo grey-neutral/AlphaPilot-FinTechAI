@@ -13,10 +13,9 @@ interface PromptBarProps {
   listening?: boolean;
   onStartVoice?: () => void;
   onStopVoice?: () => void;
-  onQuickAdd?: (text: string) => void;
 }
 
-export function PromptBar({ value, onChange, onSubmit, loading, listening, onStartVoice, onStopVoice, onQuickAdd }: PromptBarProps) {
+export function PromptBar({ value, onChange, onSubmit, loading, listening, onStartVoice, onStopVoice }: PromptBarProps) {
   const [files, setFiles] = useState<File[]>([]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -43,47 +42,41 @@ export function PromptBar({ value, onChange, onSubmit, loading, listening, onSta
           placeholder="e.g., AAPL, MSFT, GOOGL — include any instructions here"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              onQuickAdd?.(value);
-              onChange("");
-            }
-          }}
           className="min-h-28"
         />
-        <div className="flex flex-wrap items-center gap-2">
-          <div
-            {...getRootProps()}
-            className={`flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-colors ${isDragActive ? "bg-accent" : "bg-background hover:bg-accent"}`}
-            aria-label="Upload files"
-          >
-            <Input {...getInputProps()} />
-            <Upload />
-            <span className="text-sm">Upload PDF/DOCX (max 20MB each)</span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              {...getRootProps()}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-colors ${isDragActive ? "bg-accent" : "bg-background hover:bg-accent"}`}
+              aria-label="Upload files"
+            >
+              <Input {...getInputProps()} />
+              <Upload />
+              <span className="text-sm">Upload PDF/DOCX (max 20MB each)</span>
+            </div>
+
+            <Button
+              type="button"
+              variant={listening ? "destructive" : "secondary"}
+              onClick={listening ? onStopVoice : onStartVoice}
+              aria-pressed={!!listening}
+            >
+              {listening ? <Square /> : <Mic />}
+              {listening ? "Stop" : "Voice"}
+            </Button>
           </div>
 
           <Button
             type="button"
-            variant={listening ? "destructive" : "secondary"}
-            onClick={listening ? onStopVoice : onStartVoice}
-            aria-pressed={!!listening}
+            variant="default"
+            onClick={() => onSubmit({ text: value, files })}
+            disabled={loading}
+            className="flex-shrink-0"
           >
-            {listening ? <Square /> : <Mic />}
-            {listening ? "Stop" : "Voice"}
+            {loading && <Loader2 className="animate-spin" />}
+            Submit
           </Button>
-
-          <div className="ml-auto flex items-center gap-2">
-            <Button
-              type="button"
-              variant="default"
-              onClick={() => onSubmit({ text: value, files })}
-              disabled={loading}
-            >
-              {loading && <Loader2 className="animate-spin" />}
-              Submit
-            </Button>
-          </div>
         </div>
 
         {files.length > 0 && (

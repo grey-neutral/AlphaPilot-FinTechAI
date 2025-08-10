@@ -181,22 +181,6 @@ const Index = () => {
     }
   };
 
-  const handleQuickAdd = (text: string) => {
-    const pid = selectedId || (projects[0]?.id ?? null);
-    if (!pid) return;
-    const tickers = (text || "")
-      .split(/[^A-Za-z0-9]+/)
-      .map((t) => t.trim().toUpperCase())
-      .filter(Boolean);
-    if (tickers.length === 0) return;
-    const current = projects.find((p) => p.id === pid)?.data ?? [];
-    const existing = new Set(current.map((r) => r.ticker));
-    const added = tickers.filter((t) => !existing.has(t)).map((t) => mockRow(t));
-    if (added.length === 0) return;
-    updateProjectData(pid, { data: [...current, ...added] });
-    toast({ title: "Ticker(s) added", description: `${added.length} added.` });
-  };
-
   const handleTableChange = (rows: MetricRow[]) => {
     const pid = selectedId || (projects[0]?.id ?? null);
     if (!pid) return;
@@ -269,13 +253,13 @@ const Index = () => {
           onNew={createProject}
           onRename={(id, name) => setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name } : p)))}
         />
-        <SidebarInset>
+        <SidebarInset className="overflow-hidden">
           <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b bg-background/80 backdrop-blur px-4">
             <SidebarTrigger />
             <div className="text-sm text-muted-foreground">AI-Powered</div>
             <div className="font-semibold">Comps Spreader</div>
           </header>
-          <main className="container mx-auto py-6 px-4">
+          <main className="py-6 px-4 min-w-0 overflow-hidden">
             <h1 className="text-2xl font-bold mb-4">AI-Powered Comps Spreader</h1>
             <PromptBar
               value={query}
@@ -285,7 +269,6 @@ const Index = () => {
               listening={listening}
               onStartVoice={startVoice}
               onStopVoice={stopVoice}
-              onQuickAdd={handleQuickAdd}
             />
 
             {loading && (
