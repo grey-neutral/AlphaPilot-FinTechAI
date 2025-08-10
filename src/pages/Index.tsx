@@ -95,16 +95,33 @@ const Index = () => {
     setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...update } : p)));
   };
 
-  const analyzeMock = async (text: string, files: File[]): Promise<MetricRow[]> => {
-    // Simulate backend latency and build deterministic numbers from ticker
-    const tickers = (text || "")
-      .split(/[^A-Za-z0-9]+/)
-      .map((t) => t.trim().toUpperCase())
-      .filter(Boolean)
-      .slice(0, 10);
-    await new Promise((r) => setTimeout(r, 1500));
-    const rows: MetricRow[] = tickers.map((t) => mockRow(t));
-    return rows;
+  const analyzeWithAPI = async (text: string, files: File[]): Promise<MetricRow[]> => {
+    const API_BASE_URL = "http://localhost:8000";
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text,
+          files: [] // File upload to be implemented in Phase 3
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.data || [];
+      
+    } catch (error: any) {
+      console.error('API call failed:', error);
+      throw new Error(error.message || 'Failed to analyze tickers');
+    }
   };
 
   const onSubmit = async ({ text, files }: { text: string; files: File[] }) => {
@@ -116,12 +133,18 @@ const Index = () => {
 
     setLoading(true);
     try {
-      // Replace with real API POST /api/analyze
-      const data = await analyzeMock(text, files);
+      const data = await analyzeWithAPI(text, files);
       updateProjectData(pid, { data, lastQuery: text });
-      toast({ title: "Analysis complete", description: `${data.length} tickers processed.` });
+      toast({ 
+        title: "Analysis complete", 
+        description: `${data.length} tickers processed with real financial data.` 
+      });
     } catch (e: any) {
-      toast({ title: "Analysis failed", description: e?.message || "Unknown error", variant: "destructive" as any });
+      toast({ 
+        title: "Analysis failed", 
+        description: e?.message || "Unknown error", 
+        variant: "destructive" as any 
+      });
     } finally {
       setLoading(false);
     }
@@ -191,7 +214,7 @@ const Index = () => {
             />
 
             {loading && (
-              <div className="mt-6 text-sm text-muted-foreground">Fetching results…</div>
+              <div className="mt-6 text-sm text-muted-foreground">Fetching real financial data from Yahoo Finance…</div>
             )}
 
             {selectedProject && selectedProject.data.length > 0 && (
@@ -209,45 +232,5 @@ const Index = () => {
   );
 };
 
-function mockRow(ticker: string): MetricRow {
-  // Simple deterministic generator based on ticker string
-  let seed = 0;
-  for (let i = 0; i < ticker.length; i++) seed += ticker.charCodeAt(i);
-  const rand = (min: number, max: number) => {
-    const x = Math.abs(Math.sin(seed++)) % 1;
-    return min + x * (max - min);
-  };
-
-  const revenue = rand(1000, 300000); // $m
-  const ebitda = revenue * rand(0.1, 0.35);
-  const eps = rand(0.5, 12);
-  const marketCap = rand(1000, 2500000);
-  const debt = rand(0, 500000);
-  const cash = rand(0, 300000);
-  const ev = marketCap + debt - cash;
-  const evRevenueLTM = ev / revenue;
-  const evEbitdaLTM = ev / Math.max(ebitda, 1);
-  const evEbitdaNTM = evEbitdaLTM * rand(0.8, 1.2);
-  const peLTM = rand(5, 40);
-  const peNTM = peLTM * rand(0.8, 1.2);
-  const sharesOutstanding = marketCap / (eps * 100); // rough
-
-  return {
-    ticker,
-    marketCap,
-    sharesOutstanding,
-    debt,
-    cash,
-    revenue,
-    ebitda,
-    eps,
-    ev,
-    evRevenueLTM,
-    evEbitdaLTM,
-    evEbitdaNTM,
-    peLTM,
-    peNTM,
-  };
-}
 
 export default Index;
