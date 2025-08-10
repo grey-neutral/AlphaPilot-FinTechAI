@@ -25,3 +25,10 @@ class AnalysisResponse(BaseModel):
     data: List[MetricRow]
     message: str
     processed_tickers: int
+
+class ChatRequest(BaseModel):
+    text: str
+    context: List[MetricRow]
+
+class ChatResponse(BaseModel):
+    reply: str

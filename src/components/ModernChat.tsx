@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ChatMessage, ChatMessage as ChatMessageComponent } from "./ChatMessage";
+import { ChatMessage, ChatMessageType } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { Button } from "@/components/ui/button";
 import { MessageSquare, RotateCcw, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ModernChatProps {
-  messages: ChatMessage[];
+  messages: ChatMessageType[];
   onSend: (message: string, files?: File[]) => void | Promise<void>;
   loading?: boolean;
   disabled?: boolean;
@@ -31,7 +31,6 @@ export function ModernChat({
   loading = false,
   disabled = false,
   className,
-  welcomeMessage = "Ask me anything about the data above.",
   suggestedQuestions = [
     "What are the key insights from this data?",
     "Which companies are performing best?",
@@ -141,7 +140,7 @@ export function ModernChat({
         ) : (
           <div className="space-y-0">
             {messages.map((message, index) => (
-              <ChatMessageComponent
+              <ChatMessage
                 key={message.id}
                 message={message}
                 onCopy={handleCopy}
@@ -208,4 +207,4 @@ export function ModernChat({
   );
 }
 
-export type { ChatMessage };
+export type { ChatMessageType as ChatMessage };

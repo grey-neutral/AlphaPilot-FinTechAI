@@ -110,82 +110,154 @@ export function ChatMessage({ message, onCopy, onFeedback, showActions = true }:
 }
 
 function MessageContent({ content }: { content: string }) {
-  const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
-  const inlineCodeRegex = /`([^`]+)`/g;
-  
-  const parts: Array<{ type: 'text' | 'code' | 'inline-code'; content: string; language?: string }> = [];
-  let lastIndex = 0;
-  let match;
-
-  while ((match = codeBlockRegex.exec(content)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push({ type: 'text', content: content.slice(lastIndex, match.index) });
-    }
-    parts.push({ 
-      type: 'code', 
-      content: match[2], 
-      language: match[1] || 'text' 
-    });
-    lastIndex = match.index + match[0].length;
-  }
-
-  if (lastIndex < content.length) {
-    parts.push({ type: 'text', content: content.slice(lastIndex) });
-  }
-
-  if (parts.length === 0) {
-    parts.push({ type: 'text', content });
-  }
-
   return (
-    <div className="space-y-3">
-      {parts.map((part, index) => {
-        if (part.type === 'code') {
-          return (
-            <div key={index} className="relative">
-              <div className="flex items-center justify-between rounded-t-md bg-muted/50 px-3 py-2 text-xs">
-                <span className="text-muted-foreground">{part.language}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2"
-                  onClick={() => navigator.clipboard.writeText(part.content)}
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
-              <pre className="rounded-b-md bg-muted/30 p-3 text-sm overflow-x-auto">
-                <code>{part.content}</code>
-              </pre>
-            </div>
-          );
-        } else if (part.type === 'inline-code') {
-          return (
-            <code key={index} className="rounded bg-muted/30 px-1.5 py-0.5 text-sm font-mono">
-              {part.content}
-            </code>
-          );
-        } else {
-          const textWithInlineCode = part.content.split(inlineCodeRegex).map((segment, segIndex) => {
-            if (segIndex % 2 === 1) {
-              return (
-                <code key={segIndex} className="rounded bg-muted/30 px-1.5 py-0.5 text-sm font-mono">
-                  {segment}
-                </code>
-              );
-            }
-            return segment;
-          });
-          
-          return (
-            <div key={index} className="whitespace-pre-wrap">
-              {textWithInlineCode}
-            </div>
-          );
-        }
-      })}
+    <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-ul:text-foreground prose-ol:text-foreground prose-li:text-foreground">
+      <MarkdownRenderer content={content} />
     </div>
   );
 }
 
-export type { ChatMessage };
+function MarkdownRenderer({ content }: { content: string }) {
+  // First handle code blocks to avoid them being processed by other rules
+  const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+  let processedContent = content;
+  const codeBlocks: { placeholder: string; content: string; language: string }[] = [];
+  
+  // Extract code blocks
+  let match: RegExpExecArray | null;
+  let codeIndex = 0;
+  while ((match = codeBlockRegex.exec(content)) !== null) {
+    const placeholder = `__CODEBLOCK_${codeIndex}__`;
+    const language = match[1] || 'text';
+    const code = match[2];
+    codeBlocks.push({ placeholder, content: code, language });
+    processedContent = processedContent.replace(match[0], placeholder);
+    codeIndex++;
+  }
+  
+  // Split content into lines for processing
+  const lines = processedContent.split('\n');
+  const elements: React.ReactNode[] = [];
+  let currentList: string[] = [];
+  let currentListType: 'ul' | 'ol' | null = null;
+  
+  const flushList = () => {
+    if (currentList.length > 0) {
+      elements.push(
+        currentListType === 'ul' ? (
+          <ul key={elements.length} className="list-disc list-inside space-y-1 mb-4">
+            {currentList.map((item, idx) => (
+              <li key={idx} dangerouslySetInnerHTML={{ __html: processInlineMarkdown(item) }} />
+            ))}
+          </ul>
+        ) : (
+          <ol key={elements.length} className="list-decimal list-inside space-y-1 mb-4">
+            {currentList.map((item, idx) => (
+              <li key={idx} dangerouslySetInnerHTML={{ __html: processInlineMarkdown(item) }} />
+            ))}
+          </ol>
+        )
+      );
+      currentList = [];
+      currentListType = null;
+    }
+  };
+  
+  lines.forEach((line) => {
+    const trimmedLine = line.trim();
+    
+    // Handle code block placeholders
+    const codeBlock = codeBlocks.find(cb => trimmedLine === cb.placeholder);
+    if (codeBlock) {
+      flushList();
+      elements.push(
+        <div key={elements.length} className="relative mb-4">
+          <div className="flex items-center justify-between rounded-t-md bg-muted/50 px-3 py-2 text-xs">
+            <span className="text-muted-foreground">{codeBlock.language}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2"
+              onClick={() => navigator.clipboard.writeText(codeBlock.content)}
+            >
+              <Copy className="h-3 w-3" />
+            </Button>
+          </div>
+          <pre className="rounded-b-md bg-muted/30 p-3 text-sm overflow-x-auto">
+            <code>{codeBlock.content}</code>
+          </pre>
+        </div>
+      );
+      return;
+    }
+    
+    // Headers
+    if (trimmedLine.match(/^#{1,6}\s/)) {
+      flushList();
+      const level = trimmedLine.match(/^#+/)?.[0].length || 1;
+      const text = trimmedLine.replace(/^#+\s/, '');
+      const HeaderTag = `h${Math.min(level, 6)}` as keyof JSX.IntrinsicElements;
+      
+      elements.push(
+        <HeaderTag key={elements.length} className={`font-semibold mb-3 mt-4 ${
+          level === 1 ? 'text-xl' : 
+          level === 2 ? 'text-lg' : 
+          level === 3 ? 'text-base' : 'text-sm'
+        }`}>
+          {text}
+        </HeaderTag>
+      );
+      return;
+    }
+    
+    // Bullet lists
+    if (trimmedLine.match(/^[-*+]\s/)) {
+      if (currentListType !== 'ul') {
+        flushList();
+        currentListType = 'ul';
+      }
+      currentList.push(trimmedLine.replace(/^[-*+]\s/, ''));
+      return;
+    }
+    
+    // Numbered lists
+    if (trimmedLine.match(/^\d+\.\s/)) {
+      if (currentListType !== 'ol') {
+        flushList();
+        currentListType = 'ol';
+      }
+      currentList.push(trimmedLine.replace(/^\d+\.\s/, ''));
+      return;
+    }
+    
+    // Regular paragraphs
+    if (trimmedLine) {
+      flushList();
+      elements.push(
+        <p key={elements.length} className="mb-3" dangerouslySetInnerHTML={{ 
+          __html: processInlineMarkdown(trimmedLine) 
+        }} />
+      );
+    } else if (elements.length > 0 && !trimmedLine) {
+      // Empty line - add spacing
+      flushList();
+    }
+  });
+  
+  // Flush any remaining list
+  flushList();
+  
+  return <>{elements}</>;
+}
+
+function processInlineMarkdown(text: string): string {
+  return text
+    // Bold text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    // Italic text  
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    // Inline code
+    .replace(/`([^`]+)`/g, '<code class="rounded bg-muted/30 px-1.5 py-0.5 text-sm font-mono">$1</code>');
+}
+
+export type { ChatMessage as ChatMessageType };

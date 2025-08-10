@@ -138,8 +138,10 @@ const Index = () => {
   };
 
   const performChat = async (text: string, rows: MetricRow[]): Promise<string> => {
+    const API_BASE_URL = "http://localhost:8000";
+    
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetch(`${API_BASE_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, context: rows }),
@@ -148,7 +150,9 @@ const Index = () => {
         const data = await res.json();
         if (typeof data?.reply === "string") return data.reply;
       }
-    } catch {}
+    } catch (e) {
+      console.error("Chat API call failed:", e);
+    }
     return chatMock(text, rows);
   };
 
@@ -296,9 +300,6 @@ const Index = () => {
     setListening(false);
   };
 
-  const handleVoiceTranscriptUpdate = (transcript: string) => {
-    setVoiceTranscript(transcript);
-  };
 
   return (
     <SidebarProvider>
