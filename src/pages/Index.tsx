@@ -7,13 +7,22 @@ import {
 import { AppSidebar, Project as SidebarProject } from "@/components/AppSidebar";
 import { PromptBar } from "@/components/PromptBar";
 import { ResultsTable, MetricRow } from "@/components/ResultsTable";
+import { ChatPanel } from "@/components/ChatPanel";
 import { useToast } from "@/hooks/use-toast";
 
 const STORAGE_KEY = "comps_projects_v1";
 
+interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+}
+
 interface Project extends SidebarProject {
   lastQuery?: string;
   data: MetricRow[];
+  chat: ChatMessage[];
 }
 
 const Index = () => {
@@ -32,6 +41,7 @@ const Index = () => {
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const [chatLoading, setChatLoading] = useState(false);
 
   const selectedProject = useMemo(
     () => projects.find((p) => p.id === selectedId) || null,
@@ -46,7 +56,7 @@ const Index = () => {
   useEffect(() => {
     if (projects.length === 0) {
       const id = `${Date.now()}`;
-      const newProj: Project = { id, name: "Untitled 1", createdAt: new Date().toISOString(), data: [], lastQuery: "" };
+      const newProj: Project = { id, name: "Untitled 1", createdAt: new Date().toISOString(), data: [], lastQuery: "", chat: [] };
       setProjects([newProj]);
       setSelectedId(id);
     }
@@ -79,7 +89,7 @@ const Index = () => {
   const createProject = () => {
     const id = `${Date.now()}`;
     const name = `Untitled ${projects.length + 1}`;
-    const newProj: Project = { id, name, createdAt: new Date().toISOString(), data: [], lastQuery: "" };
+    const newProj: Project = { id, name, createdAt: new Date().toISOString(), data: [], lastQuery: "", chat: [] };
     setProjects([newProj, ...projects]);
     setSelectedId(id);
     setQuery("");
@@ -124,6 +134,27 @@ const Index = () => {
     }
   };
 
+  const chatMock = async (text: string, rows: MetricRow[]): Promise<string> => {
+    await new Promise((r) => setTimeout(r, 800));
+    const tickers = rows.map((r) => r.ticker).join(", ");
+    return `Placeholder response: You asked "${text}". Dataset has ${rows.length} tickers: ${tickers}.`;
+  };
+
+  const performChat = async (text: string, rows: MetricRow[]): Promise<string> => {
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, context: rows }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data?.reply === "string") return data.reply;
+      }
+    } catch {}
+    return chatMock(text, rows);
+  };
+
   const onSubmit = async ({ text, files }: { text: string; files: File[] }) => {
     if (!selectedId) {
       createProject();
@@ -147,6 +178,48 @@ const Index = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleQuickAdd = (text: string) => {
+    const pid = selectedId || (projects[0]?.id ?? null);
+    if (!pid) return;
+    const tickers = (text || "")
+      .split(/[^A-Za-z0-9]+/)
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
+    if (tickers.length === 0) return;
+    const current = projects.find((p) => p.id === pid)?.data ?? [];
+    const existing = new Set(current.map((r) => r.ticker));
+    const added = tickers.filter((t) => !existing.has(t)).map((t) => mockRow(t));
+    if (added.length === 0) return;
+    updateProjectData(pid, { data: [...current, ...added] });
+    toast({ title: "Ticker(s) added", description: `${added.length} added.` });
+  };
+
+  const handleTableChange = (rows: MetricRow[]) => {
+    const pid = selectedId || (projects[0]?.id ?? null);
+    if (!pid) return;
+    updateProjectData(pid, { data: rows });
+  };
+
+  const handleChatSend = async (text: string) => {
+    const pid = selectedId || (projects[0]?.id ?? null);
+    if (!pid) return;
+    const proj = projects.find((p) => p.id === pid);
+    if (!proj) return;
+    const userMsg: ChatMessage = { id: `${Date.now()}-u`, role: "user", content: text, createdAt: new Date().toISOString() };
+    const baseChat = [...(proj.chat || []), userMsg];
+    updateProjectData(pid, { chat: baseChat });
+    setChatLoading(true);
+    try {
+      const reply = await performChat(text, proj.data);
+      const aiMsg: ChatMessage = { id: `${Date.now()}-a`, role: "assistant", content: reply, createdAt: new Date().toISOString() };
+      updateProjectData(pid, { chat: [...baseChat, aiMsg] });
+    } catch (e: any) {
+      toast({ title: "Chat failed", description: e?.message || "Unknown error", variant: "destructive" as any });
+    } finally {
+      setChatLoading(false);
     }
   };
 
@@ -194,6 +267,7 @@ const Index = () => {
           selectedId={selectedId}
           onSelect={selectProject}
           onNew={createProject}
+          onRename={(id, name) => setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name } : p)))}
         />
         <SidebarInset>
           <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b bg-background/80 backdrop-blur px-4">
@@ -211,6 +285,7 @@ const Index = () => {
               listening={listening}
               onStartVoice={startVoice}
               onStopVoice={stopVoice}
+              onQuickAdd={handleQuickAdd}
             />
 
             {loading && (
@@ -218,13 +293,17 @@ const Index = () => {
             )}
 
             {selectedProject && selectedProject.data.length > 0 && (
-              <ResultsTable data={selectedProject.data} />
+              <ResultsTable data={selectedProject.data} onChange={handleTableChange} />
             )}
 
             <section className="mt-8">
               <h2 className="text-lg font-semibold mb-2">Document-derived metrics (coming soon)</h2>
               <p className="text-sm text-muted-foreground">This section will surface metrics extracted from uploaded PDF/DOCX files.</p>
             </section>
+
+            {selectedProject && (
+              <ChatPanel messages={selectedProject.chat || []} onSend={handleChatSend} loading={chatLoading} />
+            )}
           </main>
         </SidebarInset>
       </div>

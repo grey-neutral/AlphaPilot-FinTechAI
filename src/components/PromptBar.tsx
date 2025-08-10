@@ -13,9 +13,10 @@ interface PromptBarProps {
   listening?: boolean;
   onStartVoice?: () => void;
   onStopVoice?: () => void;
+  onQuickAdd?: (text: string) => void;
 }
 
-export function PromptBar({ value, onChange, onSubmit, loading, listening, onStartVoice, onStopVoice }: PromptBarProps) {
+export function PromptBar({ value, onChange, onSubmit, loading, listening, onStartVoice, onStopVoice, onQuickAdd }: PromptBarProps) {
   const [files, setFiles] = useState<File[]>([]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -42,6 +43,13 @@ export function PromptBar({ value, onChange, onSubmit, loading, listening, onSta
           placeholder="e.g., AAPL, MSFT, GOOGL — include any instructions here"
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              onQuickAdd?.(value);
+              onChange("");
+            }
+          }}
           className="min-h-28"
         />
         <div className="flex flex-wrap items-center gap-2">
