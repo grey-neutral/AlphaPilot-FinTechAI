@@ -1,10 +1,10 @@
-# Comp-Scribe: AI-Powered Financial Comps Spreader
+# AlphaPilot: AI-Powered Financial Comps Spreader
 
 A modern web application for analyzing financial tickers and generating comprehensive company comparison tables with AI-powered insights and document processing capabilities.
 
 ## 🚀 Project Overview
 
-Comp-Scribe is a financial analysis tool that helps users:
+AlphaPilot is a financial analysis tool that helps users:
 - Analyze company tickers and generate financial metrics tables
 - Compare companies using key financial ratios (EV/EBITDA, P/E, etc.)
 - Process financial documents (PDFs, DOCX) with AI-powered text extraction
