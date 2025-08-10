@@ -63,7 +63,7 @@ export function ResultsTable({ data, onChange }: ResultsTableProps) {
 
   const medians = React.useMemo(() => computeMedians(data), [data]);
 
-  const columns = React.useMemo<ColumnDef<MetricRow, any>[]>(
+  const columns = React.useMemo<ColumnDef<MetricRow, unknown>[]>(
     () => [
       {
         id: "actions",
@@ -82,7 +82,9 @@ export function ResultsTable({ data, onChange }: ResultsTableProps) {
             <Trash2 className="h-4 w-4" />
           </Button>
         ),
-        size: 48,
+        size: 40,
+        minSize: 40,
+        maxSize: 40,
       },
       {
         accessorKey: "ticker",
@@ -101,7 +103,9 @@ export function ResultsTable({ data, onChange }: ResultsTableProps) {
             />
           );
         },
-        size: 140,
+        size: 100,
+        minSize: 80,
+        maxSize: 120,
       },
       ...(["marketCap","sharesOutstanding","debt","cash","revenue","ebitda","eps","ev","evRevenueLTM","evEbitdaLTM","evEbitdaNTM","peLTM","peNTM"] as (keyof MetricRow)[]).map((key) => ({
         accessorKey: key,
@@ -110,7 +114,7 @@ export function ResultsTable({ data, onChange }: ResultsTableProps) {
         )
           .replace(/([A-Z])/g, " $1")
           .replace(/^./, (s) => s.toUpperCase()),
-        cell: (info: any) => {
+        cell: (info: { getValue: () => number; row: { index: number } }) => {
           const v = info.getValue() as number;
           const idx = info.row.index;
           const isMedian = medians[key] !== undefined && Math.abs((medians[key] as number) - v) < 1e-6;
@@ -127,7 +131,9 @@ export function ResultsTable({ data, onChange }: ResultsTableProps) {
             />
           );
         },
-        size: 140,
+        size: 110,
+        minSize: 90,
+        maxSize: 130,
       })),
     ],
     [data, medians, onChange]
@@ -144,7 +150,7 @@ export function ResultsTable({ data, onChange }: ResultsTableProps) {
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     columnResizeMode,
-    defaultColumn: { size: 140, minSize: 80, maxSize: 400 },
+    defaultColumn: { size: 110, minSize: 90, maxSize: 130 },
   });
 
   const exportXlsx = () => {
@@ -156,7 +162,7 @@ export function ResultsTable({ data, onChange }: ResultsTableProps) {
         .getVisibleCells()
         .filter((c) => c.column.id !== "actions")
         .map((c) => {
-          const v = c.getValue<any>();
+          const v = c.getValue<unknown>();
           return typeof v === "number" ? Number(v.toFixed(4)) : v;
         })
     );
@@ -213,68 +219,70 @@ export function ResultsTable({ data, onChange }: ResultsTableProps) {
         </Button>
       </div>
 
-      <div className="rounded-md border overflow-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-muted/50">
-            {table.getHeaderGroups().map((hg) => (
-              <tr key={hg.id}>
-                {hg.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    style={{ width: header.getSize() }}
-                    className="px-3 py-2 text-left font-medium border-b relative select-none"
-                  >
-                    {header.isPlaceholder ? null : (
-                      <button
-                        className="inline-flex items-center gap-1 hover:underline"
-                        onClick={header.column.getToggleSortingHandler()}
-                      >
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                        <ArrowUpDown className="opacity-60" />
-                      </button>
-                    )}
-                    {header.column.getCanResize() && (
-                      <div
-                        onMouseDown={header.getResizeHandler()}
-                        onTouchStart={header.getResizeHandler()}
-                        className={`absolute right-0 top-0 h-full w-1 cursor-col-resize select-none ${
-                          header.column.getIsResizing() ? "bg-primary" : "bg-transparent"
-                        }`}
-                      />
-                    )}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="hover:bg-accent/50">
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className={cellCls(cell)} style={{ width: cell.column.getSize() }}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
-            ))}
-            {/* Median row */}
-            {data.length > 0 && (
-              <tr className="bg-accent/60 font-medium">
-                {table.getVisibleLeafColumns().map((col) => {
-                  if (col.id === "actions") {
-                    return <td key={col.id} className="px-3 py-2 border-t" />;
-                  }
-                  const key = col.id as keyof MetricRow;
-                  return (
-                    <td key={col.id} className="px-3 py-2 border-t">
-                      {key === "ticker" ? "Median" : numericFormatter(medians[key] as number)}
+      <div className="rounded-md border">
+        <div className="overflow-x-auto max-w-full scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+          <table className="w-full text-sm" style={{ minWidth: 'max-content' }}>
+            <thead className="bg-muted/50">
+              {table.getHeaderGroups().map((hg) => (
+                <tr key={hg.id}>
+                  {hg.headers.map((header) => (
+                    <th
+                      key={header.id}
+                      style={{ width: header.getSize() }}
+                      className="px-3 py-2 text-left font-medium border-b relative select-none whitespace-nowrap"
+                    >
+                      {header.isPlaceholder ? null : (
+                        <button
+                          className="inline-flex items-center gap-1 hover:underline"
+                          onClick={header.column.getToggleSortingHandler()}
+                        >
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          <ArrowUpDown className="opacity-60" />
+                        </button>
+                      )}
+                      {header.column.getCanResize() && (
+                        <div
+                          onMouseDown={header.getResizeHandler()}
+                          onTouchStart={header.getResizeHandler()}
+                          className={`absolute right-0 top-0 h-full w-1 cursor-col-resize select-none ${
+                            header.column.getIsResizing() ? "bg-primary" : "bg-transparent"
+                          }`}
+                        />
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              ))}
+            </thead>
+            <tbody>
+              {table.getRowModel().rows.map((row) => (
+                <tr key={row.id} className="hover:bg-accent/50">
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} className={cellCls(cell)} style={{ width: cell.column.getSize() }}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
-                  );
-                })}
-              </tr>
-            )}
-          </tbody>
-        </table>
+                  ))}
+                </tr>
+              ))}
+              {/* Median row */}
+              {data.length > 0 && (
+                <tr className="bg-accent/60 font-medium">
+                  {table.getVisibleLeafColumns().map((col) => {
+                    if (col.id === "actions") {
+                      return <td key={col.id} className="px-3 py-2 border-t" />;
+                    }
+                    const key = col.id as keyof MetricRow;
+                    return (
+                      <td key={col.id} className="px-3 py-2 border-t">
+                        {key === "ticker" ? "Median" : numericFormatter(medians[key] as number)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   );
@@ -285,6 +293,6 @@ function hdr(label: string) {
 }
 
 // numericCell and other helpers removed in favor of inline editable inputs
-function cellCls(cell: any) {
+function cellCls(cell: { column: { getSize: () => number } }) {
   return "px-3 py-2 border-b align-middle";
 }

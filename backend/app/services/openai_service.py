@@ -1,6 +1,6 @@
 import os
 import json
-from typing import List, Optional
+from typing import List
 from openai import OpenAI
 from dotenv import load_dotenv
 import logging
@@ -23,7 +23,7 @@ class OpenAIService:
         logger.info(f"OpenAI API key loaded: {self.api_key[:10]}...")
         
         self.client = OpenAI(api_key=self.api_key)
-        self.model = "gpt-3.5-turbo"  # Fast and cost-effective for ticker extraction
+        self.model = "gpt-4.1-mini"  # Fast and cost-effective for ticker extraction
     
     def extract_tickers_from_text(self, user_input: str) -> List[str]:
         """
@@ -116,10 +116,53 @@ IMPORTANT: Always return official ticker symbols, never company names or partial
             "user": user_prompt
         }
     
-    def analyze_financial_data(self, question: str, table_data: List[dict], conversation_history: Optional[List[dict]] = None) -> str:
+    def analyze_financial_data(self, question: str, data_summaries: List[str]) -> str:
         """
-        Analyze financial data and answer user questions about comps
-        This will be implemented in Phase 6
+        Analyze financial data and answer user questions about comps using OpenAI
         """
-        # Placeholder for Phase 6 implementation
-        return "Financial analysis chat functionality will be implemented in Phase 6."
+        try:
+            # Build the financial analysis prompt
+            system_prompt = """You are a financial analyst expert specializing in comparative company analysis and financial metrics.
+
+Your role:
+- Analyze financial data for multiple companies
+- Answer questions about valuations, performance, ratios, and trends
+- Provide clear, concise, and actionable insights
+- Compare companies across key metrics when requested
+
+Guidelines:
+- Be specific with numbers and ratios
+- Explain what the metrics mean in business terms
+- Highlight significant differences between companies
+- Use professional but accessible language
+- Keep responses focused and informative"""
+
+            # Format the financial data context
+            data_context = "Financial data for analysis:\n" + "\n".join(data_summaries)
+            
+            user_prompt = f"""Based on the following financial data:
+
+{data_context}
+
+Question: {question}
+
+Please provide a detailed analysis answering the user's question. Focus on the specific metrics they're asking about and provide context for what the numbers mean."""
+
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",  # Better model for analysis
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.3,  # Some creativity but mostly factual
+                max_tokens=500
+            )
+            
+            content = response.choices[0].message.content.strip()
+            logger.info(f"Generated financial analysis response for question: '{question[:50]}...'")
+            return content
+            
+        except Exception as e:
+            logger.error(f"OpenAI financial analysis failed: {str(e)}")
+            # Return a fallback response instead of the placeholder
+            return f"I encountered an issue while analyzing the data. Based on the available information, I can see you're asking about {question}. Please try rephrasing your question or check the data in the table above."
