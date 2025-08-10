@@ -10,7 +10,7 @@ import {
   useReactTable,
   ColumnResizeMode,
 } from "@tanstack/react-table";
-import { ArrowUpDown, Download } from "lucide-react";
+import { ArrowUpDown, Download, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import * as XLSX from "xlsx";
@@ -53,9 +53,10 @@ function computeMedians(rows: MetricRow[]) {
 
 interface ResultsTableProps {
   data: MetricRow[];
+  onChange?: (rows: MetricRow[]) => void;
 }
 
-export function ResultsTable({ data }: ResultsTableProps) {
+export function ResultsTable({ data, onChange }: ResultsTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState("");
   const [columnResizeMode] = React.useState<ColumnResizeMode>("onChange");
@@ -65,26 +66,71 @@ export function ResultsTable({ data }: ResultsTableProps) {
   const columns = React.useMemo<ColumnDef<MetricRow, any>[]>(
     () => [
       {
+        id: "actions",
+        header: "",
+        cell: (info) => (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              const idx = info.row.index;
+              const next = data.filter((_, i) => i !== idx);
+              onChange?.(next);
+            }}
+            aria-label="Delete row"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        ),
+        size: 48,
+      },
+      {
         accessorKey: "ticker",
         header: "Ticker",
-        cell: (info) => <span className="font-medium">{info.getValue<string>()}</span>,
-        size: 120,
+        cell: (info) => {
+          const v = info.getValue<string>() ?? "";
+          const idx = info.row.index;
+          return (
+            <Input
+              value={v}
+              onChange={(e) => {
+                const next = data.map((r, i) => (i === idx ? { ...r, ticker: e.target.value.toUpperCase() } : r));
+                onChange?.(next);
+              }}
+              className="h-8"
+            />
+          );
+        },
+        size: 140,
       },
-      { accessorKey: "marketCap", header: "Market Cap", cell: numericCell("marketCap", medians), size: 160 },
-      { accessorKey: "sharesOutstanding", header: "Shares Out", cell: numericCell("sharesOutstanding", medians), size: 150 },
-      { accessorKey: "debt", header: "Debt", cell: numericCell("debt", medians), size: 130 },
-      { accessorKey: "cash", header: "Cash", cell: numericCell("cash", medians), size: 130 },
-      { accessorKey: "revenue", header: "Revenue", cell: numericCell("revenue", medians), size: 150 },
-      { accessorKey: "ebitda", header: "EBITDA", cell: numericCell("ebitda", medians), size: 150 },
-      { accessorKey: "eps", header: "EPS", cell: numericCell("eps", medians), size: 120 },
-      { accessorKey: "ev", header: "EV", cell: numericCell("ev", medians), size: 140 },
-      { accessorKey: "evRevenueLTM", header: "EV/Revenue LTM", cell: numericCell("evRevenueLTM", medians), size: 170 },
-      { accessorKey: "evEbitdaLTM", header: "EV/EBITDA LTM", cell: numericCell("evEbitdaLTM", medians), size: 170 },
-      { accessorKey: "evEbitdaNTM", header: "EV/EBITDA NTM", cell: numericCell("evEbitdaNTM", medians), size: 170 },
-      { accessorKey: "peLTM", header: "P/E LTM", cell: numericCell("peLTM", medians), size: 140 },
-      { accessorKey: "peNTM", header: "P/E NTM", cell: numericCell("peNTM", medians), size: 140 },
+      ...(["marketCap","sharesOutstanding","debt","cash","revenue","ebitda","eps","ev","evRevenueLTM","evEbitdaLTM","evEbitdaNTM","peLTM","peNTM"] as (keyof MetricRow)[]).map((key) => ({
+        accessorKey: key,
+        header: String(
+          key
+        )
+          .replace(/([A-Z])/g, " $1")
+          .replace(/^./, (s) => s.toUpperCase()),
+        cell: (info: any) => {
+          const v = info.getValue() as number;
+          const idx = info.row.index;
+          const isMedian = medians[key] !== undefined && Math.abs((medians[key] as number) - v) < 1e-6;
+          return (
+            <Input
+              type="number"
+              value={Number.isFinite(v) ? v : ""}
+              onChange={(e) => {
+                const val = e.target.value === "" ? NaN : Number(e.target.value);
+                const next = data.map((r, i) => (i === idx ? { ...r, [key]: val } : r));
+                onChange?.(next);
+              }}
+              className={`h-8 ${isMedian ? "bg-accent" : ""}`}
+            />
+          );
+        },
+        size: 140,
+      })),
     ],
-    [medians]
+    [data, medians, onChange]
   );
 
   const table = useReactTable({
@@ -102,16 +148,21 @@ export function ResultsTable({ data }: ResultsTableProps) {
   });
 
   const exportXlsx = () => {
-    const headers = table.getVisibleLeafColumns().map((c) => c.columnDef.header as string);
+    const allCols = table.getVisibleLeafColumns();
+    const cols = allCols.filter((c) => c.id !== "actions");
+    const headers = cols.map((c) => c.columnDef.header as string);
     const rows = table.getRowModel().rows.map((r) =>
-      r.getVisibleCells().map((c) => {
-        const v = c.getValue<any>();
-        return typeof v === "number" ? Number(v.toFixed(4)) : v;
-      })
+      r
+        .getVisibleCells()
+        .filter((c) => c.column.id !== "actions")
+        .map((c) => {
+          const v = c.getValue<any>();
+          return typeof v === "number" ? Number(v.toFixed(4)) : v;
+        })
     );
 
     // Append median row
-    const medianRow = table.getVisibleLeafColumns().map((c) => {
+    const medianRow = cols.map((c) => {
       const key = c.id as keyof MetricRow;
       if (key === "ticker") return "Median";
       const mv = medians[key];
@@ -134,6 +185,28 @@ export function ResultsTable({ data }: ResultsTableProps) {
           onChange={(e) => setGlobalFilter(e.target.value)}
           className="max-w-xs"
         />
+        <Button
+          variant="secondary"
+          onClick={() => onChange?.([...data, {
+            ticker: "",
+            marketCap: NaN,
+            sharesOutstanding: NaN,
+            debt: NaN,
+            cash: NaN,
+            revenue: NaN,
+            ebitda: NaN,
+            eps: NaN,
+            ev: NaN,
+            evRevenueLTM: NaN,
+            evEbitdaLTM: NaN,
+            evEbitdaNTM: NaN,
+            peLTM: NaN,
+            peNTM: NaN,
+          }])}
+          aria-label="Add row"
+        >
+          <Plus className="mr-1 h-4 w-4" /> Add row
+        </Button>
         <Button variant="secondary" className="ml-auto" onClick={exportXlsx} aria-label="Download XLSX">
           <Download />
           Download .xlsx
@@ -188,6 +261,9 @@ export function ResultsTable({ data }: ResultsTableProps) {
             {data.length > 0 && (
               <tr className="bg-accent/60 font-medium">
                 {table.getVisibleLeafColumns().map((col) => {
+                  if (col.id === "actions") {
+                    return <td key={col.id} className="px-3 py-2 border-t" />;
+                  }
                   const key = col.id as keyof MetricRow;
                   return (
                     <td key={col.id} className="px-3 py-2 border-t">
@@ -208,16 +284,7 @@ function hdr(label: string) {
   return () => <div className="font-medium">{label}</div>;
 }
 
-function numericCell<Key extends keyof MetricRow>(key: Key, medians: Partial<Record<keyof MetricRow, number>>) {
-  return (info: any) => {
-    const v = info.getValue() as number;
-    const isMedian = medians[key] !== undefined && Math.abs((medians[key] as number) - v) < 1e-6;
-    return (
-      <span className={isMedian ? "bg-accent px-1 py-0.5 rounded" : undefined}>{numericFormatter(v)}</span>
-    );
-  };
-}
-
+// numericCell and other helpers removed in favor of inline editable inputs
 function cellCls(cell: any) {
   return "px-3 py-2 border-b align-middle";
 }
