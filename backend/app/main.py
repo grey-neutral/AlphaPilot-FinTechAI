@@ -14,8 +14,12 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",  # Vite dev server
         "http://localhost:3000",  # Alternative frontend port
+        "http://localhost:8080",  # User's frontend port
         "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000"
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8080",
+        "https://preview--alphapilot-fintechai.lovable.app",
+        "https://alphapilot-fintechai.lovable.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
