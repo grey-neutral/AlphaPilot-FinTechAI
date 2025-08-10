@@ -32,12 +32,10 @@ export function ChatInput({
   maxLength = 4000,
   allowFiles = true,
   maxFiles = 5,
-  maxFileSize = 10 * 1024 * 1024, // 10MB
+  maxFileSize = 20 * 1024 * 1024, // 20MB
   acceptedFileTypes = {
     "application/pdf": [".pdf"],
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
-    "text/plain": [".txt"],
-    "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp"]
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"]
   },
   onVoiceStart,
   onVoiceStop,
@@ -216,7 +214,8 @@ export function ChatInput({
           <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-primary/10 border-2 border-dashed border-primary">
             <div className="text-center">
               <Paperclip className="mx-auto h-8 w-8 text-primary mb-2" />
-              <p className="text-sm text-primary font-medium">Drop files here</p>
+              <p className="text-sm text-primary font-medium">Drop PDF/DOCX files here</p>
+              <p className="text-xs text-primary/70">Max 20MB each</p>
             </div>
           </div>
         )}

@@ -21,6 +21,8 @@ interface ModernChatProps {
   onVoiceStart?: () => void;
   onVoiceStop?: () => void;
   isListening?: boolean;
+  voiceTranscript?: string;
+  onVoiceTranscriptClear?: () => void;
 }
 
 export function ModernChat({
@@ -43,11 +45,21 @@ export function ModernChat({
   maxHeight = "600px",
   onVoiceStart,
   onVoiceStop,
-  isListening = false
+  isListening = false,
+  voiceTranscript = "",
+  onVoiceTranscriptClear
 }: ModernChatProps) {
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Update input value when voice transcript changes
+  useEffect(() => {
+    if (voiceTranscript && voiceTranscript.trim()) {
+      setInputValue(voiceTranscript);
+      onVoiceTranscriptClear?.();
+    }
+  }, [voiceTranscript, onVoiceTranscriptClear]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -108,23 +120,15 @@ export function ModernChat({
         style={{ maxHeight }}
       >
         {isEmpty ? (
-          <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-            <div className="rounded-full bg-primary/10 p-4 mb-4">
-              <Sparkles className="h-8 w-8 text-primary" />
-            </div>
-            <h4 className="text-lg font-medium mb-2">Start a conversation</h4>
-            <p className="text-muted-foreground mb-6 max-w-md">
-              {welcomeMessage}
-            </p>
-            
+          <div className="flex flex-col items-center justify-center h-full p-4 text-center">            
             {showSuggestedActions && suggestedQuestions.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-md">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 w-full max-w-4xl">
                 {suggestedQuestions.map((question, index) => (
                   <Button
                     key={index}
                     variant="outline"
                     size="sm"
-                    className="text-left justify-start h-auto py-3 px-4 whitespace-normal"
+                    className="text-left justify-start h-auto py-2 px-3 whitespace-normal text-xs"
                     onClick={() => handleSuggestedQuestion(question)}
                     disabled={loading || disabled}
                   >

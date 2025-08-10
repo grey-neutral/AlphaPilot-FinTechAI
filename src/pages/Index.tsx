@@ -5,7 +5,6 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { AppSidebar, Project as SidebarProject } from "@/components/AppSidebar";
-import { PromptBar } from "@/components/PromptBar";
 import { ResultsTable, MetricRow } from "@/components/ResultsTable";
 import { ModernChat } from "@/components/ModernChat";
 import { useToast } from "@/hooks/use-toast";
@@ -38,11 +37,11 @@ const Index = () => {
     }
   });
   const [selectedId, setSelectedId] = useState<string | null>(projects[0]?.id ?? null);
-  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   const [chatLoading, setChatLoading] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
 
   const selectedProject = useMemo(
     () => projects.find((p) => p.id === selectedId) || null,
@@ -93,13 +92,10 @@ const Index = () => {
     const newProj: Project = { id, name, createdAt: new Date().toISOString(), data: [], lastQuery: "", chat: [] };
     setProjects([newProj, ...projects]);
     setSelectedId(id);
-    setQuery("");
   };
 
   const selectProject = (id: string) => {
     setSelectedId(id);
-    const p = projects.find((x) => x.id === id);
-    setQuery(p?.lastQuery || "");
   };
 
   const updateProjectData = (id: string, update: Partial<Project>) => {
@@ -156,31 +152,6 @@ const Index = () => {
     return chatMock(text, rows);
   };
 
-  const onSubmit = async ({ text, files }: { text: string; files: File[] }) => {
-    if (!selectedId) {
-      createProject();
-    }
-    const pid = selectedId || (projects[0]?.id ?? null);
-    if (!pid) return;
-
-    setLoading(true);
-    try {
-      const data = await analyzeWithAPI(text, files);
-      updateProjectData(pid, { data, lastQuery: text });
-      toast({ 
-        title: "Analysis complete", 
-        description: `${data.length} tickers processed with real financial data.` 
-      });
-    } catch (e: any) {
-      toast({ 
-        title: "Analysis failed", 
-        description: e?.message || "Unknown error", 
-        variant: "destructive" as any 
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleTableChange = (rows: MetricRow[]) => {
     const pid = selectedId || (projects[0]?.id ?? null);
@@ -188,7 +159,7 @@ const Index = () => {
     updateProjectData(pid, { data: rows });
   };
 
-  const handleChatSend = async (text: string, files?: File[]) => {
+  const handleMainChatSend = async (text: string, files?: File[]) => {
     const pid = selectedId || (projects[0]?.id ?? null);
     if (!pid) return;
     const proj = projects.find((p) => p.id === pid);
@@ -207,20 +178,74 @@ const Index = () => {
     };
     const baseChat = [...(proj.chat || []), userMsg];
     updateProjectData(pid, { chat: baseChat });
-    setChatLoading(true);
-    try {
-      const reply = await performChat(text, proj.data);
-      const aiMsg: ChatMessage = { 
-        id: `${Date.now()}-a`, 
-        role: "assistant", 
-        content: reply, 
-        createdAt: new Date().toISOString() 
-      };
-      updateProjectData(pid, { chat: [...baseChat, aiMsg] });
-    } catch (e: any) {
-      toast({ title: "Chat failed", description: e?.message || "Unknown error", variant: "destructive" as any });
-    } finally {
-      setChatLoading(false);
+
+    // Check if this looks like a ticker analysis request
+    const tickerPattern = /\b[A-Z]{1,5}\b/g;
+    const tickers = text.match(tickerPattern);
+    const hasAnalysisKeywords = /analyze|compare|show|find|data|stock|ticker|financial/i.test(text);
+    
+    if ((tickers && tickers.length > 0 && hasAnalysisKeywords) || proj.data.length === 0) {
+      // This looks like a request for financial data analysis
+      setLoading(true);
+      try {
+        const data = await analyzeWithAPI(text, files);
+        updateProjectData(pid, { data, lastQuery: text });
+        
+        // Add analysis completion message
+        const analysisMsg: ChatMessage = { 
+          id: `${Date.now()}-analysis`, 
+          role: "assistant", 
+          content: `I've analyzed ${data.length} companies and generated the financial data table below. You can now ask me follow-up questions about the data, trends, or comparisons.`, 
+          createdAt: new Date().toISOString() 
+        };
+        updateProjectData(pid, { chat: [...baseChat, analysisMsg] });
+        
+        toast({ 
+          title: "Analysis complete", 
+          description: `${data.length} tickers processed with real financial data.` 
+        });
+      } catch (e: any) {
+        const errorMsg: ChatMessage = { 
+          id: `${Date.now()}-error`, 
+          role: "assistant", 
+          content: `I encountered an error while fetching financial data: ${e?.message || "Unknown error"}. Please try again or rephrase your request.`, 
+          createdAt: new Date().toISOString() 
+        };
+        updateProjectData(pid, { chat: [...baseChat, errorMsg] });
+        
+        toast({ 
+          title: "Analysis failed", 
+          description: e?.message || "Unknown error", 
+          variant: "destructive" as any 
+        });
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      // This is a regular chat question about existing data
+      setChatLoading(true);
+      try {
+        const reply = await performChat(text, proj.data);
+        const aiMsg: ChatMessage = { 
+          id: `${Date.now()}-a`, 
+          role: "assistant", 
+          content: reply, 
+          createdAt: new Date().toISOString() 
+        };
+        updateProjectData(pid, { chat: [...baseChat, aiMsg] });
+      } catch (e: any) {
+        const errorMsg: ChatMessage = { 
+          id: `${Date.now()}-chat-error`, 
+          role: "assistant", 
+          content: `I encountered an error while processing your question: ${e?.message || "Unknown error"}. Please try again.`, 
+          createdAt: new Date().toISOString() 
+        };
+        updateProjectData(pid, { chat: [...baseChat, errorMsg] });
+        
+        toast({ title: "Chat failed", description: e?.message || "Unknown error", variant: "destructive" as any });
+      } finally {
+        setChatLoading(false);
+      }
     }
   };
 
@@ -251,7 +276,7 @@ const Index = () => {
         const transcript = Array.from(e.results)
           .map((r: any) => r[0].transcript)
           .join(" ");
-        setQuery((q) => (q ? `${q} ${transcript}` : transcript));
+        setVoiceTranscript(transcript);
       };
       rec.onerror = () => setListening(false);
       rec.onend = () => setListening(false);
@@ -271,6 +296,10 @@ const Index = () => {
     setListening(false);
   };
 
+  const handleVoiceTranscriptUpdate = (transcript: string) => {
+    setVoiceTranscript(transcript);
+  };
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
@@ -288,19 +317,34 @@ const Index = () => {
             <div className="font-semibold">Comps Spreader</div>
           </header>
           <main className="py-6 px-4 min-w-0 overflow-hidden">
-            <h1 className="text-2xl font-bold mb-4">AI-Powered Comps Spreader</h1>
-            <PromptBar
-              value={query}
-              onChange={setQuery}
-              onSubmit={onSubmit}
-              loading={loading}
-              listening={listening}
-              onStartVoice={startVoice}
-              onStopVoice={stopVoice}
-            />
+            
+            {selectedProject && (
+              <div className="mb-6">
+                <ModernChat 
+                  messages={selectedProject.chat || []} 
+                  onSend={handleMainChatSend} 
+                  loading={loading || chatLoading}
+                  onClear={handleChatClear}
+                  onFeedback={handleChatFeedback}
+                  onVoiceStart={startVoice}
+                  onVoiceStop={stopVoice}
+                  isListening={listening}
+                  voiceTranscript={voiceTranscript}
+                  onVoiceTranscriptClear={() => setVoiceTranscript("")}
+                  welcomeMessage="Enter tickers (e.g., AAPL, MSFT, GOOGL) or ask me to analyze financial data. I can fetch real-time data and provide insights."
+                  suggestedQuestions={[
+                    "Analyze NVDA and AMD",
+                    "Compare AAPL, MSFT, GOOGL", 
+                    "Show me top tech stocks performance",
+                    "Find undervalued companies"
+                  ]}
+                  maxHeight="400px"
+                />
+              </div>
+            )}
 
             {loading && (
-              <div className="mt-6 text-sm text-muted-foreground">Fetching real financial data from Yahoo Finance…</div>
+              <div className="mb-6 text-sm text-muted-foreground">Fetching real financial data from Yahoo Finance…</div>
             )}
 
             {selectedProject && selectedProject.data.length > 0 && (
@@ -311,29 +355,6 @@ const Index = () => {
               <h2 className="text-lg font-semibold mb-2">Document-derived metrics (coming soon)</h2>
               <p className="text-sm text-muted-foreground">This section will surface metrics extracted from uploaded PDF/DOCX files.</p>
             </section>
-
-            {selectedProject && (
-              <div className="mt-8">
-                <ModernChat 
-                  messages={selectedProject.chat || []} 
-                  onSend={handleChatSend} 
-                  loading={chatLoading}
-                  onClear={handleChatClear}
-                  onFeedback={handleChatFeedback}
-                  onVoiceStart={startVoice}
-                  onVoiceStop={stopVoice}
-                  isListening={listening}
-                  welcomeMessage="Ask me anything about the financial data above. I can help you analyze trends, compare companies, and provide insights."
-                  suggestedQuestions={[
-                    "What are the key financial insights?",
-                    "Which companies have the best valuations?",
-                    "Show me the profitability trends",
-                    "Compare debt levels across companies"
-                  ]}
-                  maxHeight="500px"
-                />
-              </div>
-            )}
           </main>
         </SidebarInset>
       </div>

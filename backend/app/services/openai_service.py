@@ -23,7 +23,7 @@ class OpenAIService:
         logger.info(f"OpenAI API key loaded: {self.api_key[:10]}...")
         
         self.client = OpenAI(api_key=self.api_key)
-        self.model = "gpt-3.5-turbo"  # Fast and cost-effective for ticker extraction
+        self.model = "gpt-4.1-mini"  # Fast and cost-effective for ticker extraction
     
     def extract_tickers_from_text(self, user_input: str) -> List[str]:
         """
