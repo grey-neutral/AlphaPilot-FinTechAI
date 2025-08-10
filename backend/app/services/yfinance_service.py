@@ -1,7 +1,7 @@
 import yfinance as yf
 import re
-import time
-from typing import List, Dict, Any, Optional
+import requests
+from typing import List, Dict, Any
 from app.models.schemas import MetricRow
 import logging
 
@@ -12,6 +12,15 @@ class YFinanceService:
     
     def __init__(self):
         self.cache = {}  # Simple in-memory cache for demo
+        
+        # Create a persistent session with proper headers
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        })
+        
+        # Configure yfinance to use our session
+        yf.utils._session = self.session
     
     def parse_tickers_from_text(self, text: str) -> List[str]:
         """Extract ticker symbols from input text"""
@@ -38,50 +47,57 @@ class YFinanceService:
         return list(dict.fromkeys(tickers))[:10]
     
     def get_stock_data(self, tickers: List[str]) -> Dict[str, Any]:
-        """Fetch basic stock data from Yahoo Finance"""
+        """Fetch basic stock data from Yahoo Finance with session reuse"""
         stock_data = {}
+        uncached_tickers = []
         
+        # Check cache first
         for ticker in tickers:
+            if ticker in self.cache:
+                stock_data[ticker] = self.cache[ticker]
+            else:
+                uncached_tickers.append(ticker)
+        
+        if not uncached_tickers:
+            return stock_data
+        
+        # Fetch data for each ticker individually using our configured session
+        for ticker in uncached_tickers:
             try:
-                # Check cache first
-                if ticker in self.cache:
-                    stock_data[ticker] = self.cache[ticker]
-                    continue
-                
-                # Add small delay to avoid rate limits
-                time.sleep(0.5)
-                
-                # Fetch from Yahoo Finance
+                # Create ticker object with our session configuration
                 stock = yf.Ticker(ticker)
-                info = stock.info
-                history = stock.history(period="1d")
                 
-                if info and 'marketCap' in info and history is not None and not history.empty:
-                    data = {
-                        'ticker': ticker,
-                        'marketCap': info.get('marketCap', 0),
-                        'sharesOutstanding': info.get('sharesOutstanding', 0),
-                        'totalDebt': info.get('totalDebt', 0),
-                        'totalCash': info.get('totalCash', 0),
-                        'revenue': info.get('totalRevenue', 0),
-                        'ebitda': info.get('ebitda', 0),
-                        'trailingEps': info.get('trailingEps', 0),
-                        'forwardEps': info.get('forwardEps', 0),
-                        'currentPrice': info.get('currentPrice', 0),
-                        'currency': info.get('currency', 'USD')
-                    }
-                    
-                    # Cache the result
+                # Get basic info - this uses our session with proper headers
+                info = stock.info
+                
+                if info and len(info) > 5:  # Basic validation
+                    data = self._extract_ticker_data(ticker, info)
                     self.cache[ticker] = data
                     stock_data[ticker] = data
                 else:
-                    logger.warning(f"Insufficient data for ticker: {ticker}")
+                    logger.warning(f"Insufficient data returned for {ticker}")
                     
             except Exception as e:
                 logger.error(f"Error fetching data for {ticker}: {str(e)}")
                 continue
         
         return stock_data
+    
+    def _extract_ticker_data(self, ticker: str, info: dict) -> Dict[str, Any]:
+        """Extract relevant data from Yahoo Finance info dict"""
+        return {
+            'ticker': ticker,
+            'marketCap': info.get('marketCap', 0),
+            'sharesOutstanding': info.get('sharesOutstanding', 0),
+            'totalDebt': info.get('totalDebt', 0),
+            'totalCash': info.get('totalCash', 0),
+            'revenue': info.get('totalRevenue', 0),
+            'ebitda': info.get('ebitda', 0),
+            'trailingEps': info.get('trailingEps', 0),
+            'forwardEps': info.get('forwardEps', 0),
+            'currentPrice': info.get('currentPrice', 0),
+            'currency': info.get('currency', 'USD')
+        }
     
     def calculate_ev(self, market_cap: float, debt: float, cash: float) -> float:
         """Calculate Enterprise Value: Market Cap + Debt - Cash"""

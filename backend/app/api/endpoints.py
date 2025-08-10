@@ -23,19 +23,29 @@ async def analyze_tickers(request: AnalysisRequest):
         
         logger.info(f"Analyzing text: {request.text[:100]}...")
         
-        # Use YFinanceService to analyze the text
-        metric_rows = yfinance_service.analyze_text_input(request.text)
+        # Extract tickers first to provide better feedback
+        tickers = yfinance_service.parse_tickers_from_text(request.text)
         
-        if not metric_rows:
+        if not tickers:
             return AnalysisResponse(
                 data=[],
                 message="No valid tickers found in the input text",
                 processed_tickers=0
             )
         
+        logger.info(f"Found tickers: {tickers}")
+        
+        # Use YFinanceService to analyze the text
+        metric_rows = yfinance_service.process_tickers(tickers)
+        
+        if not metric_rows:
+            # Check if it's a rate limit issue
+            error_msg = f"Failed to load data from Yahoo Finance for tickers: {', '.join(tickers)}. This may be due to rate limits or API restrictions. Please try again in a few minutes or with fewer tickers."
+            raise HTTPException(status_code=429, detail=error_msg)
+        
         return AnalysisResponse(
             data=metric_rows,
-            message=f"Successfully analyzed {len(metric_rows)} tickers",
+            message=f"Successfully analyzed {len(metric_rows)} tickers: {', '.join([r.ticker for r in metric_rows])}",
             processed_tickers=len(metric_rows)
         )
         
