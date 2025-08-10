@@ -7,7 +7,7 @@ import {
 import { AppSidebar, Project as SidebarProject } from "@/components/AppSidebar";
 import { PromptBar } from "@/components/PromptBar";
 import { ResultsTable, MetricRow } from "@/components/ResultsTable";
-import { ChatPanel } from "@/components/ChatPanel";
+import { ModernChat } from "@/components/ModernChat";
 import { useToast } from "@/hooks/use-toast";
 
 const STORAGE_KEY = "comps_projects_v1";
@@ -17,6 +17,7 @@ interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   createdAt: string;
+  attachments?: { name: string; url: string; type: string }[];
 }
 
 interface Project extends SidebarProject {
@@ -105,7 +106,7 @@ const Index = () => {
     setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...update } : p)));
   };
 
-  const analyzeWithAPI = async (text: string, files: File[]): Promise<MetricRow[]> => {
+  const analyzeWithAPI = async (text: string, _files?: File[]): Promise<MetricRow[]> => {
     const API_BASE_URL = "http://localhost:8000";
     
     try {
@@ -187,24 +188,51 @@ const Index = () => {
     updateProjectData(pid, { data: rows });
   };
 
-  const handleChatSend = async (text: string) => {
+  const handleChatSend = async (text: string, files?: File[]) => {
     const pid = selectedId || (projects[0]?.id ?? null);
     if (!pid) return;
     const proj = projects.find((p) => p.id === pid);
     if (!proj) return;
-    const userMsg: ChatMessage = { id: `${Date.now()}-u`, role: "user", content: text, createdAt: new Date().toISOString() };
+    
+    const userMsg: ChatMessage = { 
+      id: `${Date.now()}-u`, 
+      role: "user", 
+      content: text, 
+      createdAt: new Date().toISOString(),
+      attachments: files?.map(file => ({ 
+        name: file.name, 
+        url: URL.createObjectURL(file), 
+        type: file.type 
+      }))
+    };
     const baseChat = [...(proj.chat || []), userMsg];
     updateProjectData(pid, { chat: baseChat });
     setChatLoading(true);
     try {
       const reply = await performChat(text, proj.data);
-      const aiMsg: ChatMessage = { id: `${Date.now()}-a`, role: "assistant", content: reply, createdAt: new Date().toISOString() };
+      const aiMsg: ChatMessage = { 
+        id: `${Date.now()}-a`, 
+        role: "assistant", 
+        content: reply, 
+        createdAt: new Date().toISOString() 
+      };
       updateProjectData(pid, { chat: [...baseChat, aiMsg] });
     } catch (e: any) {
       toast({ title: "Chat failed", description: e?.message || "Unknown error", variant: "destructive" as any });
     } finally {
       setChatLoading(false);
     }
+  };
+
+  const handleChatClear = () => {
+    const pid = selectedId || (projects[0]?.id ?? null);
+    if (!pid) return;
+    updateProjectData(pid, { chat: [] });
+  };
+
+  const handleChatFeedback = (messageId: string, type: "like" | "dislike") => {
+    console.log(`Message ${messageId} received ${type} feedback`);
+    // Implement feedback storage/API call here
   };
 
   const startVoice = () => {
@@ -285,7 +313,26 @@ const Index = () => {
             </section>
 
             {selectedProject && (
-              <ChatPanel messages={selectedProject.chat || []} onSend={handleChatSend} loading={chatLoading} />
+              <div className="mt-8">
+                <ModernChat 
+                  messages={selectedProject.chat || []} 
+                  onSend={handleChatSend} 
+                  loading={chatLoading}
+                  onClear={handleChatClear}
+                  onFeedback={handleChatFeedback}
+                  onVoiceStart={startVoice}
+                  onVoiceStop={stopVoice}
+                  isListening={listening}
+                  welcomeMessage="Ask me anything about the financial data above. I can help you analyze trends, compare companies, and provide insights."
+                  suggestedQuestions={[
+                    "What are the key financial insights?",
+                    "Which companies have the best valuations?",
+                    "Show me the profitability trends",
+                    "Compare debt levels across companies"
+                  ]}
+                  maxHeight="500px"
+                />
+              </div>
             )}
           </main>
         </SidebarInset>
